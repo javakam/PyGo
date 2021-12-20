@@ -3,16 +3,47 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.chrome.options import Options
 from pyquery import PyQuery as pq
 import time
 import re
+# 目标站点: https://www.jd.com
+#
+from config_jd import *
+import pymongo
+client = pymongo.MongoClient(MONGO_URL)
+db = client[MONGO_DB]
 
-browser = webdriver.Chrome()
-browser.set_window_size(1080, 720)
+# 使用 Chrome 或 Firefox 的无头版替代 PhantomJS
+# 这段代码定义了headless chrome，所有的配置都一样
+# 用Python做爬虫的各位，不要再用PhantomJS了 👉 https://www.jianshu.com/p/31f2b63437ed
+options = Options()
+options.add_argument('--headless')
+options.add_argument('--disable-gpu')
+options.add_argument('--window-size=1366x768')
+
+user_agent = (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_4) " +
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/29.0.1547.57 Safari/537.36"
+)
+
+# 通过设置user-agent，用来模拟移动设备 -> 会进入 m.jd.com
+# user_agent = 'MQQBrowser/26 Mozilla/5.0 (Linux; U; Android 2.3.7; zh-cn; MB200 Build/GRJ22; ' \
+#              'CyanogenMod-7) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1'
+# options.add_argument('--user-agent=iphone')
+
+options.add_argument('user-agent=%s' % user_agent)
+
+# 1. Chrome
+browser = webdriver.Chrome(options=options)
+# 2. PhantomJS
+# browser = webdriver.PhantomJS(service_args=SERVICE_ARGS)
+# browser.set_window_size(1400, 900)
 wait = WebDriverWait(browser, 10)
 
 
 def search():
+    print('正在搜索')
     try:
         browser.get('https://www.jd.com')
         content = wait.until(
@@ -36,6 +67,7 @@ def search():
 
 
 def next_page(page_number):
+    print('正在翻页', page_number)
     try:
         input_page = wait.until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "#J_bottomPage > span.p-skip > input"))
@@ -51,6 +83,7 @@ def next_page(page_number):
         print(f"当前页码:{page_number}")
         get_products()  # wait.until(get_products())
     except TimeoutException:
+        print(f"超时重试:{page_number}")
         next_page(page_number)
 
 
@@ -75,6 +108,15 @@ def get_products():
             'shop': item.find('.p-shop a').text()
         }
         print(product)
+        save_to_mongo(product)
+
+
+def save_to_mongo(result):
+    try:
+        if db[MONGO_TABLE].insert_one(result):
+            print('保存成功', result)
+    except Exception:
+        print('保存失败', result)
 
 
 def main():
@@ -88,6 +130,7 @@ def main():
     # print(int(total[1]))
     for i in range(2, total + 1):
         next_page(i)
+    browser.close()
 
 
 if __name__ == '__main__':

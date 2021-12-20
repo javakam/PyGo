@@ -6,6 +6,7 @@ from multiprocessing import Pool
 from bs4 import BeautifulSoup
 from requests.exceptions import RequestException
 
+# 目标站点: https://maoyan.com/board/4
 
 def get_one_page(url, headers):
     try:
